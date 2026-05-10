@@ -1,6 +1,6 @@
 # headscale-bash-manager
 
-A full-featured terminal UI for managing a [Headscale](https://github.com/juanfont/headscale) server (self-hosted Tailscale control plane). Runs directly on the Headscale server. Built with `dialog` for the interface and `python3` for JSON parsing — no `jq` required.
+A full-featured terminal UI for managing a [Headscale](https://github.com/juanfont/headscale) server (self-hosted Tailscale control plane). Runs directly on the Headscale server. Built with `dialog` for the interface and `python3` for JSON parsing, no `jq` required.
 
 ## Requirements
 
@@ -22,13 +22,13 @@ headscale-manager
 ## Features
 
 ### Nodes
-- List all nodes — ID, online status (●/○), name, user, Tailscale IP, last seen, route counts
+- List all nodes: ID, online status (●/○), name, user, Tailscale IP, last seen, route counts
 - Rename a node
 - Expire a node (forces re-authentication)
 - Delete a node
-- Manage routes — checklist combining both available and approved routes
-- Set tags — comma-separated input, automatically prefixes `tag:`
-- Register a new node — enter node key, select user
+- Manage routes: checklist combining both available and approved routes
+- Set tags: comma-separated input, automatically prefixes `tag:`
+- Register a new node: enter node key, select user
 
 ### Users
 - List all users
@@ -37,20 +37,20 @@ headscale-manager
 - Delete user
 
 ### Pre-Auth Keys
-- List all keys — user, expiry, used, reusable, ephemeral flags
-- Create key — select user, set expiry, optionally reusable and/or ephemeral
+- List all keys: user, expiry, used, reusable, ephemeral flags
+- Create key: select user, set expiry, optionally reusable and/or ephemeral
 - Expire key
 - Delete key
 
 ### API Keys
-- List all keys — prefix and expiry
-- Create key — set expiry, key is shown once
+- List all keys: prefix and expiry
+- Create key: set expiry, key is shown once
 - Expire key
 - Delete key
 
 ### ACL Policy
 - View current policy (scrollable)
-- Edit policy in-place — opens HuJSON in an editbox, applies on save
+- Edit policy in-place: opens HuJSON in an editbox, applies on save
 
 ### Health
 - Displays `headscale health` output with per-check status
@@ -59,6 +59,5 @@ headscale-manager
 
 - Mouse support
 - Adapts to terminal size automatically (SIGWINCH)
-- ESC or the **0 — Back** entry in every submenu returns to the previous screen
+- ESC or the **0 - Back** entry in every submenu returns to the previous screen
 <img width="1797" height="520" alt="image" src="https://github.com/user-attachments/assets/04d2aea2-d5d8-4eca-b7d4-81fca7411cd8" />
-
