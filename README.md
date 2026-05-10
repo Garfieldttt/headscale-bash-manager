@@ -8,17 +8,6 @@ A full-featured terminal UI for managing a [Headscale](https://github.com/juanfo
 - `dialog` (`apt install dialog`)
 - `python3`
 
-## Installation
-
-```bash
-# Copy to the server
-scp headscale-manager.sh root@your-server:/usr/local/bin/headscale-manager
-chmod +x /usr/local/bin/headscale-manager
-
-# Run
-headscale-manager
-```
-
 ## Features
 
 ### Nodes
