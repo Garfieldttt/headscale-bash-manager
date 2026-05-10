@@ -1,7 +1,6 @@
 # headscale-bash-manager
 
-A full-featured terminal UI for managing a [Headscale](https://github.com/juanfont/headscale) server (self-hosted Tailscale control plane). Runs directly on the Headscale server. Built with `dialog` for the interface and `python3` for JSON parsing, no `jq` required.
-
+A full-featured terminal UI for managing a [Headscale](https://github.com/juanfont/headscale) server (self-hosted Tailscale control plane). Runs directly on the Headscale server.
 ## Requirements
 
 - Headscale v0.28+
@@ -48,5 +47,4 @@ A full-featured terminal UI for managing a [Headscale](https://github.com/juanfo
 
 - Mouse support
 - Adapts to terminal size automatically (SIGWINCH)
-- ESC or the **0 - Back** entry in every submenu returns to the previous screen
 <img width="1797" height="520" alt="image" src="https://github.com/user-attachments/assets/04d2aea2-d5d8-4eca-b7d4-81fca7411cd8" />
