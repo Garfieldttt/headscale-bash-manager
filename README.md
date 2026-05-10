@@ -60,3 +60,5 @@ headscale-manager
 - Mouse support
 - Adapts to terminal size automatically (SIGWINCH)
 - ESC or the **0 — Back** entry in every submenu returns to the previous screen
+<img width="1797" height="520" alt="image" src="https://github.com/user-attachments/assets/04d2aea2-d5d8-4eca-b7d4-81fca7411cd8" />
+
