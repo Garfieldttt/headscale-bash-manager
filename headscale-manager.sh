@@ -18,7 +18,7 @@ offer_copy() {
   local kw=$(( ${#value} + 8 ))
   [[ $kw -gt $W ]] && kw=$W
   dialog --title "$TITLE — $label" \
-    --inputbox "\nDoppelklick markiert alles → Ctrl+Shift+C zum Kopieren:" 9 $kw "$value" 2>/dev/null
+    --inputbox "\nDouble-click to select all, then Ctrl+Shift+C to copy:" 9 $kw "$value" 2>/dev/null
 }
 
 extract_key() {
@@ -325,13 +325,13 @@ nodes_register() {
   local server_url
   server_url=$(grep -E '^server_url:' /etc/headscale/config.yaml 2>/dev/null | awk '{print $2}')
   dialog --title "$TITLE — Register Node" --msgbox "\
-\nAuf dem Client ausführen:\n\
+\nRun on the client:\n\
   tailscale login --login-server ${server_url:-<server_url>}\n\
 \n\
-Im Browser wird eine URL angezeigt. Den Teil\n\
+A URL will open in the browser. Copy the part\n\
   nodekey:...\n\
-aus der URL kopieren und im nächsten Dialog einfügen." 13 $W || return
-  dialog --title "$TITLE" --inputbox "\nNode key einfügen (Ctrl+Shift+V), Format: nodekey:...:" 9 $W "" 2>"$TMPFILE" || return
+from the URL and paste it in the next dialog." 13 $W || return
+  dialog --title "$TITLE" --inputbox "\nPaste node key (Ctrl+Shift+V), format: nodekey:...:" 9 $W "" 2>"$TMPFILE" || return
   local nodekey; nodekey=$(cat "$TMPFILE")
   [[ -z "$nodekey" ]] && return
   select_user_name "Select user for new node:" || return
