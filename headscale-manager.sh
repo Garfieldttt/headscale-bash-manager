@@ -736,14 +736,30 @@ policy_edit() {
   printf "%s" "$current" > "$edit_tmp"
 
   dialog --title "$TITLE — Edit ACL Policy" --msgbox "\nCopy/paste in editor:\n  Paste: Ctrl+Shift+V\n  Copy:  Shift+double-click, then Ctrl+Shift+C\n\nPress Enter to open editor." 11 $W
-  dialog --title "$TITLE — Edit ACL Policy (HuJSON)" --editbox "$edit_tmp" $H $W 2>"$TMPFILE" || { rm -f "$edit_tmp"; return; }
-  cat "$TMPFILE" > "$edit_tmp"
 
-  dialog --title "$TITLE" --yesno "\nSave and apply ACL policy?" 7 $W || { rm -f "$edit_tmp"; return; }
+  while true; do
+    dialog --title "$TITLE — Edit ACL Policy (HuJSON)" --editbox "$edit_tmp" $H $W 2>"$TMPFILE" || { rm -f "$edit_tmp"; return; }
+    cat "$TMPFILE" > "$edit_tmp"
 
-  local out; out=$(headscale policy set -f "$edit_tmp" </dev/null 2>&1)
-  rm -f "$edit_tmp"
-  dialog --title "$TITLE" --msgbox "\n$out" 10 $W
+    dialog --title "$TITLE" --yesno "\nSave and apply ACL policy?" 7 $W || { rm -f "$edit_tmp"; return; }
+
+    local out; out=$(headscale policy set -f "$edit_tmp" </dev/null 2>&1)
+    if [[ $? -eq 0 ]]; then
+      rm -f "$edit_tmp"
+      dialog --title "$TITLE" --msgbox "\nPolicy applied successfully." 7 $W
+      return
+    fi
+
+    local err_line
+    err_line=$(printf '%s' "$out" | grep -oE 'line [0-9]+' | head -1)
+    local hint=""
+    [[ -n "$err_line" ]] && hint="\n\nError at $err_line — editor will jump to it."
+    dialog --title "$TITLE — ACL Error" \
+      --extra-button --extra-label "Fix" \
+      --yesno "\nError applying policy:\n\n$out$hint\n\nFix the error?" $(( H - 2 )) $W
+    local rc=$?
+    [[ $rc -eq 0 || $rc -eq 3 ]] || { rm -f "$edit_tmp"; return; }
+  done
 }
 
 menu_policy() {
