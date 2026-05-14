@@ -463,19 +463,26 @@ menu_users() {
 preauthkeys_list() {
   local out
   out=$(keys_json | python3 -c "
-import json, sys, datetime
+import json, sys, datetime, time
 def fmt(ts):
     try: return datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M')
     except: return '-'
+now = time.time()
 keys = json.load(sys.stdin)
-print(f\"{'ID':<4} {'User':<28} {'Expires':<18} {'Used':<5} {'Reu':<4} {'Eph'}\")
-print('-' * 68)
+print(f\"{'ID':<4} {'User':<28} {'Expires':<18} {'Status':<10} {'Reu':<4} {'Eph'}\")
+print('-' * 72)
 for k in keys:
-    exp  = fmt(k.get('expiration', {}).get('seconds', 0))
-    used = 'yes'  if k.get('used')      else 'no'
-    reu  = 'yes'  if k.get('reusable')  else 'no'
-    eph  = 'yes'  if k.get('ephemeral') else 'no'
-    print(f\"{k['id']:<4} {k['user']['name']:<28} {exp:<18} {used:<5} {reu:<4} {eph}\")
+    exp_ts = k.get('expiration', {}).get('seconds', 0)
+    exp    = fmt(exp_ts)
+    reu    = 'yes' if k.get('reusable')  else 'no'
+    eph    = 'yes' if k.get('ephemeral') else 'no'
+    if exp_ts and exp_ts < now:
+        status = 'expired'
+    elif k.get('used') and not k.get('reusable'):
+        status = 'exhausted'
+    else:
+        status = 'active'
+    print(f\"{k['id']:<4} {k['user']['name']:<28} {exp:<18} {status:<10} {reu:<4} {eph}\")
 ") || { dialog --title "$TITLE" --msgbox "\nError fetching keys." 7 $W; return; }
   local tmp; tmp=$(mktemp)
   printf "%s" "$out" > "$tmp"
