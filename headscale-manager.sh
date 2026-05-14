@@ -331,7 +331,7 @@ nodes_register() {
 Im Browser wird eine URL angezeigt. Den Teil\n\
   nodekey:...\n\
 aus der URL kopieren und im nächsten Dialog einfügen." 13 $W || return
-  dialog --title "$TITLE" --inputbox "\nNode key einfügen (nodekey:...):" 9 $W "" 2>"$TMPFILE" || return
+  dialog --title "$TITLE" --inputbox "\nNode key einfügen (Ctrl+Shift+V), Format: nodekey:...:" 9 $W "" 2>"$TMPFILE" || return
   local nodekey; nodekey=$(cat "$TMPFILE")
   [[ -z "$nodekey" ]] && return
   select_user_name "Select user for new node:" || return
