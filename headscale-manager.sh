@@ -41,7 +41,7 @@ keys_json()    { headscale preauthkeys list -o json </dev/null 2>&1; }
 apikeys_json() { headscale apikeys list    -o json </dev/null 2>&1; }
 
 parse_nodes_menu() {
-  log "parse_nodes_menu: start"
+  log "parse_nodes_menu: start filter=${1:-all}"
   local json; json=$(nodes_json)
   local rc=$?
   log "parse_nodes_menu: nodes_json rc=$rc, bytes=${#json}"
@@ -51,8 +51,11 @@ parse_nodes_menu() {
   fi
   printf '%s\n' "$json" | python3 -c "
 import json, sys
+filter_mode = '${1:-all}'
 data = json.load(sys.stdin)
 for n in data:
+    if filter_mode == 'routes' and not (n.get('available_routes') or n.get('approved_routes')):
+        continue
     online = '●' if n.get('online') else '○'
     ip = n['ip_addresses'][0] if n.get('ip_addresses') else '-'
     label = f\"{online} {n['given_name']:<20} {n['user']['name']:<28} {ip}\"
@@ -242,7 +245,15 @@ for n in json.load(sys.stdin):
 }
 
 nodes_routes() {
-  select_node "Select node for route management:" || return
+  log "nodes_routes: start"
+  local prompt="Select node for route management:"
+  local -a items
+  readarray -t items < <(parse_nodes_menu routes)
+  [[ ${#items[@]} -eq 0 ]] && { dialog --title "$TITLE" --msgbox "\nNo nodes with routes found." 7 $W; return; }
+  : > "$TMPFILE"
+  dialog --title "$TITLE" --menu "\n$prompt" $H $W 14 "${items[@]}" 2>"$TMPFILE" || return
+  [[ -z "$(cat "$TMPFILE")" ]] && return
+  local node_id; node_id=$(cat "$TMPFILE")
   local node_id; node_id=$(cat "$TMPFILE")
 
   local route_data
@@ -321,6 +332,69 @@ for n in json.load(sys.stdin):
   offer_copy "node IP" "$ip"
 }
 
+nodes_details() {
+  select_node "Select node to view:" || return
+  local node_id; node_id=$(cat "$TMPFILE")
+  local out
+  out=$(nodes_json | python3 -c "
+import json, sys, datetime
+def fmt(ts):
+    try: return datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M')
+    except: return '-'
+for n in json.load(sys.stdin):
+    if str(n['id']) == '${node_id}':
+        online = 'online' if n.get('online') else 'offline'
+        ips    = ', '.join(n.get('ip_addresses') or ['-'])
+        tags   = ', '.join((n.get('valid_tags') or []) + (n.get('forced_tags') or [])) or '-'
+        avail  = ', '.join(n.get('available_routes') or ['-'])
+        appr   = ', '.join(n.get('approved_routes')  or ['-'])
+        print(f'Name:       {n[\"given_name\"]}')
+        print(f'ID:         {n[\"id\"]}')
+        print(f'Status:     {online}')
+        print(f'User:       {n[\"user\"][\"name\"]}')
+        print(f'IPs:        {ips}')
+        print(f'Last seen:  {fmt(n.get(\"last_seen\", {}).get(\"seconds\", 0))}')
+        print(f'Expiry:     {fmt(n.get(\"expiry\", {}).get(\"seconds\", 0))}')
+        print(f'Tags:       {tags}')
+        print(f'Routes avail: {avail}')
+        print(f'Routes appr:  {appr}')
+        break
+" 2>/dev/null)
+  dialog --title "$TITLE — Node Details" --msgbox "\n$out" 17 $W
+}
+
+nodes_move() {
+  select_node "Select node to move:" || return
+  local node_id; node_id=$(cat "$TMPFILE")
+  select_user_name "Select new user for node #$node_id:" || return
+  local username; username=$(cat "$TMPFILE")
+  local out; out=$(headscale nodes move -i "$node_id" -u "$username" --force </dev/null 2>&1)
+  dialog --title "$TITLE" --msgbox "\n$out" 9 $W
+}
+
+nodes_list_online() {
+  local out
+  out=$(nodes_json | python3 -c "
+import json, sys, datetime
+def fmt(ts):
+    try: return datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M')
+    except: return '-'
+nodes = [n for n in json.load(sys.stdin) if n.get('online')]
+if not nodes:
+    print('No nodes currently online.')
+else:
+    print(f\"{'ID':<4} {'Name':<22} {'User':<28} {'IP'}\")
+    print('-' * 78)
+    for n in nodes:
+        ip = n['ip_addresses'][0] if n.get('ip_addresses') else '-'
+        print(f\"{n['id']:<4} {'●'} {n['given_name']:<20} {n['user']['name']:<28} {ip}\")
+") || { dialog --title "$TITLE" --msgbox "\nError fetching nodes." 7 $W; return; }
+  local tmp; tmp=$(mktemp)
+  printf "%s" "$out" > "$tmp"
+  dialog --title "$TITLE — Online Nodes" --scrolltext --textbox "$tmp" $H $W
+  rm -f "$tmp"
+}
+
 nodes_register() {
   local server_url
   server_url=$(grep -E '^server_url:' /etc/headscale/config.yaml 2>/dev/null | awk '{print $2}')
@@ -364,28 +438,34 @@ else:
 
 menu_nodes() {
   while true; do
-    dialog --title "$TITLE — Nodes" --menu "\nWhat would you like to do?" 20 $W 10 \
+    dialog --title "$TITLE — Nodes" --menu "\nWhat would you like to do?" 24 $W 13 \
       "1" "List nodes" \
-      "2" "Routes overview" \
-      "3" "Rename node" \
-      "4" "Expire node" \
-      "5" "Delete node" \
-      "6" "Manage routes" \
-      "7" "Set tags" \
-      "8" "Register node" \
-      "9" "Copy node IP" \
+      "2" "Online nodes only" \
+      "3" "Node details" \
+      "4" "Routes overview" \
+      "5" "Rename node" \
+      "6" "Move node to other user" \
+      "7" "Expire node" \
+      "8" "Delete node" \
+      "9" "Manage routes" \
+      "a" "Set tags" \
+      "b" "Register node" \
+      "c" "Copy node IP" \
       "0" "Back" \
       2>"$TMPFILE" || return
     case $(cat "$TMPFILE") in
       1) nodes_list ;;
-      2) nodes_routes_overview ;;
-      3) nodes_rename ;;
-      4) nodes_expire ;;
-      5) nodes_delete ;;
-      6) nodes_routes ;;
-      7) nodes_tags ;;
-      8) nodes_register ;;
-      9) nodes_copy_ip ;;
+      2) nodes_list_online ;;
+      3) nodes_details ;;
+      4) nodes_routes_overview ;;
+      5) nodes_rename ;;
+      6) nodes_move ;;
+      7) nodes_expire ;;
+      8) nodes_delete ;;
+      9) nodes_routes ;;
+      a) nodes_tags ;;
+      b) nodes_register ;;
+      c) nodes_copy_ip ;;
       0) return ;;
     esac
   done
@@ -394,19 +474,24 @@ menu_nodes() {
 # ─── Users ───────────────────────────────────────────────────────────────────
 
 users_list() {
+  local tmp_nodes tmp_users; tmp_nodes=$(mktemp); tmp_users=$(mktemp)
+  nodes_json > "$tmp_nodes"; users_json > "$tmp_users"
   local out
-  out=$(users_json | python3 -c "
+  out=$(python3 -c "
 import json, sys, datetime
+from collections import Counter
 def fmt(ts):
     try: return datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d')
     except: return '-'
-users = json.load(sys.stdin)
-print(f\"{'ID':<6} {'Name':<36} {'Created'}\")
-print('-' * 56)
+nodes = json.load(open('$tmp_nodes'))
+users = json.load(open('$tmp_users'))
+counts = Counter(n['user']['name'] for n in nodes)
+print(f\"{'ID':<6} {'Name':<36} {'Created':<12} {'Nodes'}\")
+print('-' * 62)
 for u in users:
-    created = fmt(u.get('created_at', {}).get('seconds', 0))
-    print(f\"{u['id']:<6} {u['name']:<36} {created}\")
+    print(f\"{u['id']:<6} {u['name']:<36} {fmt(u.get('created_at',{}).get('seconds',0)):<12} {counts.get(u['name'],0)}\")
 ") || { dialog --title "$TITLE" --msgbox "\nError fetching users." 7 $W; return; }
+  rm -f "$tmp_nodes" "$tmp_users"
   local tmp; tmp=$(mktemp)
   printf "%s" "$out" > "$tmp"
   dialog --title "$TITLE — Users" --scrolltext --textbox "$tmp" $H $W
@@ -521,13 +606,37 @@ preauthkeys_delete() {
   dialog --title "$TITLE" --msgbox "\n$out" 9 $W
 }
 
+preauthkeys_cleanup() {
+  local ids
+  ids=$(keys_json | python3 -c "
+import json, sys, time
+now = time.time()
+for k in json.load(sys.stdin):
+    exp_ts = k.get('expiration', {}).get('seconds', 0)
+    if (k.get('used') and not k.get('reusable')) or (exp_ts and exp_ts < now):
+        print(k['id'])
+" 2>/dev/null)
+  if [[ -z "$ids" ]]; then
+    dialog --title "$TITLE" --msgbox "\nNo exhausted or expired keys found." 7 $W
+    return
+  fi
+  local count; count=$(printf '%s\n' "$ids" | wc -l)
+  dialog --title "$TITLE" --yesno "\nDelete $count exhausted/expired key(s)?" 7 $W || return
+  local failed=0
+  while IFS= read -r id; do
+    headscale preauthkeys delete -i "$id" --force </dev/null 2>&1 || (( failed++ ))
+  done <<< "$ids"
+  dialog --title "$TITLE" --msgbox "\nDeleted $(( count - failed )) of $count key(s)." 7 $W
+}
+
 menu_preauthkeys() {
   while true; do
-    dialog --title "$TITLE — Pre-Auth Keys" --menu "\nWhat would you like to do?" 14 $W 5 \
+    dialog --title "$TITLE — Pre-Auth Keys" --menu "\nWhat would you like to do?" 16 $W 6 \
       "1" "List keys" \
       "2" "Create key" \
       "3" "Expire key" \
       "4" "Delete key" \
+      "5" "Delete all exhausted/expired" \
       "0" "Back" \
       2>"$TMPFILE" || return
     case $(cat "$TMPFILE") in
@@ -535,6 +644,7 @@ menu_preauthkeys() {
       2) preauthkeys_create ;;
       3) preauthkeys_expire ;;
       4) preauthkeys_delete ;;
+      5) preauthkeys_cleanup ;;
       0) return ;;
     esac
   done
@@ -668,6 +778,39 @@ except Exception:
   dialog --title "$TITLE — Health" --msgbox "\n$out" 10 $W
 }
 
+# ─── Warnings ────────────────────────────────────────────────────────────────
+
+check_warnings() {
+  local tmp_nodes tmp_keys; tmp_nodes=$(mktemp); tmp_keys=$(mktemp)
+  nodes_json > "$tmp_nodes"; keys_json > "$tmp_keys"
+  local msg
+  msg=$(python3 -c "
+import json, time
+now = time.time()
+nodes = json.load(open('$tmp_nodes'))
+keys  = json.load(open('$tmp_keys'))
+
+issues = []
+long_offline = [n['given_name'] for n in nodes
+    if not n.get('online') and (now - n.get('last_seen',{}).get('seconds', now)) > 7*86400]
+if long_offline:
+    issues.append(f\"{len(long_offline)} node(s) offline >7 days: {', '.join(long_offline[:3])}{'...' if len(long_offline)>3 else ''}\")
+
+expiring = [k['id'] for k in keys
+    if not (k.get('used') and not k.get('reusable'))
+    and k.get('expiration',{}).get('seconds',0)
+    and now < k['expiration']['seconds'] < now + 3*86400]
+if expiring:
+    issues.append(f\"{len(expiring)} pre-auth key(s) expiring within 3 days\")
+
+for line in issues:
+    print(line)
+" 2>/dev/null)
+  rm -f "$tmp_nodes" "$tmp_keys"
+  [[ -z "$msg" ]] && return
+  dialog --title "$TITLE — Warnings" --msgbox "\n⚠  Attention:\n\n$msg" 11 $W
+}
+
 # ─── Setup ───────────────────────────────────────────────────────────────────
 
 check_deps() {
@@ -686,6 +829,7 @@ check_deps() {
 
 main() {
   check_deps
+  check_warnings
   while true; do
     dialog --title "$TITLE" \
       --menu "\nHeadscale $(headscale version 2>/dev/null | head -1)" 17 $W 7 \
