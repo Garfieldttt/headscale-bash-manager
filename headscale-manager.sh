@@ -12,11 +12,6 @@ export -f log LOG
 
 log "headscale-manager: start PID=$$"
 
-osc52_copy() {
-  printf '\033]52;c;%s\a' "$(printf '%s' "$1" | base64 -w 0)" > /dev/tty
-  dialog --title "$TITLE" --msgbox "\nCopied to clipboard." 6 $W
-}
-
 offer_copy() {
   local label="$1" value="$2"
   [[ -z "$value" ]] && return
