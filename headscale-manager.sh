@@ -2,6 +2,7 @@
 # headscale-manager — Headscale TUI (runs directly on the server)
 
 TITLE="Headscale Manager"
+export DIALOGOPTS="--mouse"
 TMPFILE=$(mktemp)
 trap 'rm -f "$TMPFILE"' EXIT
 
