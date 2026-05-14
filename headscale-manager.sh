@@ -22,12 +22,14 @@ offer_copy() {
   [[ -z "$value" ]] && return
   dialog --title "$TITLE" \
     --extra-button --extra-label "Show" \
-    --yesno "\nCopy $label to clipboard? (OSC 52)\nOr press [Show] to display for manual copy." 9 $W
+    --yesno "\nCopy $label to clipboard? (OSC 52)\nOr press [Show] to display as plain text." 9 $W
   local rc=$?
   if [[ $rc -eq 0 ]]; then
     osc52_copy "$value"
   elif [[ $rc -eq 3 ]]; then
-    dialog --title "$TITLE — $label" --inputbox "\nSelect all & copy:" 9 $W "$value" 2>/dev/null
+    clear
+    printf '\n%s:\n\n  %s\n\nSelect & copy, then press Enter...\n' "$label" "$value" > /dev/tty
+    read -r < /dev/tty
   fi
 }
 
