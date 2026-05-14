@@ -3,7 +3,9 @@
 
 TITLE="Headscale Manager"
 TMPFILE=$(mktemp)
-trap 'rm -f "$TMPFILE"' EXIT
+KEY_FILE=$(mktemp)
+chmod 600 "$KEY_FILE"
+trap 'rm -f "$TMPFILE" "$KEY_FILE"' EXIT
 
 LOG=/tmp/hm.log
 : > "$LOG"
@@ -16,8 +18,6 @@ osc52_copy() {
   printf '\033]52;c;%s\a' "$(printf '%s' "$1" | base64 -w 0)" > /dev/tty
   dialog --title "$TITLE" --msgbox "\nCopied to clipboard." 6 $W
 }
-
-KEY_FILE=/tmp/hm-last-key.txt
 
 offer_copy() {
   local label="$1" value="$2"
