@@ -12,6 +12,21 @@ export -f log LOG
 
 log "headscale-manager: start PID=$$"
 
+osc52_copy() {
+  printf '\033]52;c;%s\a' "$(printf '%s' "$1" | base64 -w 0)" > /dev/tty
+  dialog --title "$TITLE" --msgbox "\nCopied to clipboard." 6 $W
+}
+
+offer_copy() {
+  local label="$1" value="$2"
+  [[ -z "$value" ]] && return
+  dialog --title "$TITLE" --yesno "\nCopy $label to clipboard?" 7 $W && osc52_copy "$value"
+}
+
+extract_key() {
+  printf '%s' "$1" | grep -oE '[A-Za-z0-9_:/-]{32,}' | head -1
+}
+
 resize_dims() {
   H=$(tput lines 2>/dev/null); [[ -z "$H" || "$H" -lt 10 ]] && H=24
   W=$(tput cols  2>/dev/null); [[ -z "$W" || "$W" -lt 40 ]] && W=80
@@ -293,6 +308,21 @@ for n in json.load(sys.stdin):
   dialog --title "$TITLE" --msgbox "\n$out" 9 $W
 }
 
+nodes_copy_ip() {
+  select_node "Select node to copy IP:" || return
+  local node_id; node_id=$(cat "$TMPFILE")
+  local ip
+  ip=$(nodes_json | python3 -c "
+import json,sys
+for n in json.load(sys.stdin):
+    if str(n['id']) == '${node_id}':
+        print(n['ip_addresses'][0] if n.get('ip_addresses') else '')
+        break
+" 2>/dev/null)
+  [[ -z "$ip" ]] && { dialog --title "$TITLE" --msgbox "\nNo IP found for node #$node_id." 7 $W; return; }
+  osc52_copy "$ip"
+}
+
 nodes_register() {
   dialog --title "$TITLE" --inputbox "\nNode key (nodekey:... from 'tailscale login' output):" 9 $W "" 2>"$TMPFILE" || return
   local nodekey; nodekey=$(cat "$TMPFILE")
@@ -327,7 +357,7 @@ else:
 
 menu_nodes() {
   while true; do
-    dialog --title "$TITLE — Nodes" --menu "\nWhat would you like to do?" 18 $W 9 \
+    dialog --title "$TITLE — Nodes" --menu "\nWhat would you like to do?" 20 $W 10 \
       "1" "List nodes" \
       "2" "Routes overview" \
       "3" "Rename node" \
@@ -336,6 +366,7 @@ menu_nodes() {
       "6" "Manage routes" \
       "7" "Set tags" \
       "8" "Register node" \
+      "9" "Copy node IP" \
       "0" "Back" \
       2>"$TMPFILE" || return
     case $(cat "$TMPFILE") in
@@ -347,6 +378,7 @@ menu_nodes() {
       6) nodes_routes ;;
       7) nodes_tags ;;
       8) nodes_register ;;
+      9) nodes_copy_ip ;;
       0) return ;;
     esac
   done
@@ -457,6 +489,7 @@ preauthkeys_create() {
 
   local out; out=$(headscale preauthkeys create -u "$user_id" -e "$expiry" "${extra_args[@]}" </dev/null 2>&1)
   dialog --title "$TITLE" --msgbox "\nNew pre-auth key:\n\n$out" 13 $W
+  offer_copy "pre-auth key" "$(extract_key "$out")"
 }
 
 preauthkeys_expire() {
@@ -521,6 +554,7 @@ apikeys_create() {
   [[ -z "$expiry" ]] && expiry="90d"
   local out; out=$(headscale apikeys create -e "$expiry" </dev/null 2>&1)
   dialog --title "$TITLE" --msgbox "\nNew API key:\n\n$out\n\nSave it now — it will not be shown again!" 13 $W
+  offer_copy "API key" "$(extract_key "$out")"
 }
 
 apikeys_expire() {
