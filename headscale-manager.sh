@@ -3,9 +3,7 @@
 
 TITLE="Headscale Manager"
 TMPFILE=$(mktemp)
-KEY_FILE=$(mktemp)
-chmod 600 "$KEY_FILE"
-trap 'rm -f "$TMPFILE" "$KEY_FILE"' EXIT
+trap 'rm -f "$TMPFILE"' EXIT
 
 LOG=/tmp/hm.log
 : > "$LOG"
@@ -22,11 +20,10 @@ osc52_copy() {
 offer_copy() {
   local label="$1" value="$2"
   [[ -z "$value" ]] && return
-  printf '%s\n' "$value" > "$KEY_FILE"
-  dialog --title "$TITLE" \
-    --extra-button --extra-label "OSC 52" \
-    --yesno "\n$label saved to $KEY_FILE\n\nRun in another terminal:\n  cat $KEY_FILE\n\nOr press [OSC 52] to copy via terminal escape\n(iTerm2 / kitty / WezTerm / Windows Terminal)." 13 $W
-  [[ $? -eq 3 ]] && osc52_copy "$value"
+  local kw=$(( ${#value} + 8 ))
+  [[ $kw -gt $W ]] && kw=$W
+  dialog --title "$TITLE — $label" \
+    --inputbox "\nShift+Drag to select, then Ctrl+Shift+C:" 9 $kw "$value" 2>/dev/null
 }
 
 extract_key() {
