@@ -20,7 +20,15 @@ osc52_copy() {
 offer_copy() {
   local label="$1" value="$2"
   [[ -z "$value" ]] && return
-  dialog --title "$TITLE" --yesno "\nCopy $label to clipboard?" 7 $W && osc52_copy "$value"
+  dialog --title "$TITLE" \
+    --extra-button --extra-label "Show" \
+    --yesno "\nCopy $label to clipboard? (OSC 52)\nOr press [Show] to display for manual copy." 9 $W
+  local rc=$?
+  if [[ $rc -eq 0 ]]; then
+    osc52_copy "$value"
+  elif [[ $rc -eq 3 ]]; then
+    dialog --title "$TITLE — $label" --inputbox "\nSelect all & copy:" 9 $W "$value" 2>/dev/null
+  fi
 }
 
 extract_key() {
