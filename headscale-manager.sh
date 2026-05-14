@@ -625,6 +625,7 @@ policy_edit() {
   local edit_tmp; edit_tmp=$(mktemp --suffix=.json)
   printf "%s" "$current" > "$edit_tmp"
 
+  dialog --title "$TITLE — Edit ACL Policy" --msgbox "\nCopy/paste in editor:\n  Paste: Ctrl+Shift+V\n  Copy:  Shift+double-click, then Ctrl+Shift+C\n\nPress Enter to open editor." 11 $W
   dialog --title "$TITLE — Edit ACL Policy (HuJSON)" --editbox "$edit_tmp" $H $W 2>"$TMPFILE" || { rm -f "$edit_tmp"; return; }
   cat "$TMPFILE" > "$edit_tmp"
 
