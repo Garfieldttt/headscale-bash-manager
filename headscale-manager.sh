@@ -323,7 +323,7 @@ for n in json.load(sys.stdin):
         break
 " 2>/dev/null)
   [[ -z "$ip" ]] && { dialog --title "$TITLE" --msgbox "\nNo IP found for node #$node_id." 7 $W; return; }
-  osc52_copy "$ip"
+  offer_copy "node IP" "$ip"
 }
 
 nodes_register() {
