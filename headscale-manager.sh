@@ -17,19 +17,16 @@ osc52_copy() {
   dialog --title "$TITLE" --msgbox "\nCopied to clipboard." 6 $W
 }
 
+KEY_FILE=/tmp/hm-last-key.txt
+
 offer_copy() {
   local label="$1" value="$2"
   [[ -z "$value" ]] && return
+  printf '%s\n' "$value" > "$KEY_FILE"
   dialog --title "$TITLE" \
-    --extra-button --extra-label "Show" \
-    --yesno "\nCopy $label to clipboard? (OSC 52)\nOr press [Show] to display as plain text." 9 $W
-  local rc=$?
-  if [[ $rc -eq 0 ]]; then
-    osc52_copy "$value"
-  elif [[ $rc -eq 3 ]]; then
-    dialog --title "$TITLE — $label" \
-      --inputbox "\nShift+Drag to select, then Ctrl+Shift+C:" 9 $W "$value" 2>/dev/null
-  fi
+    --extra-button --extra-label "OSC 52" \
+    --yesno "\n$label saved to $KEY_FILE\n\nRun in another terminal:\n  cat $KEY_FILE\n\nOr press [OSC 52] to copy via terminal escape\n(iTerm2 / kitty / WezTerm / Windows Terminal)." 13 $W
+  [[ $? -eq 3 ]] && osc52_copy "$value"
 }
 
 extract_key() {
