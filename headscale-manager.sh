@@ -18,7 +18,7 @@ offer_copy() {
   local kw=$(( ${#value} + 8 ))
   [[ $kw -gt $W ]] && kw=$W
   dialog --title "$TITLE — $label" \
-    --inputbox "\nKlick am Anfang des Keys, Shift+Klick am Ende → Ctrl+Shift+C zum Kopieren:" 9 $kw "$value" 2>/dev/null
+    --inputbox "\nDoppelklick markiert alles → Ctrl+Shift+C zum Kopieren:" 9 $kw "$value" 2>/dev/null
 }
 
 extract_key() {
