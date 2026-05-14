@@ -27,9 +27,8 @@ offer_copy() {
   if [[ $rc -eq 0 ]]; then
     osc52_copy "$value"
   elif [[ $rc -eq 3 ]]; then
-    clear
-    printf '\n%s:\n\n  %s\n\nSelect & copy, then press Enter...\n' "$label" "$value" > /dev/tty
-    read -r < /dev/tty
+    dialog --title "$TITLE — $label" \
+      --inputbox "\nShift+Drag to select, then Ctrl+Shift+C:" 9 $W "$value" 2>/dev/null
   fi
 }
 
