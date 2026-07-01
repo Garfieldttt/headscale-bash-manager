@@ -712,9 +712,33 @@ menu_apikeys() {
 
 # ─── Policy ──────────────────────────────────────────────────────────────────
 
-policy_backup_current() {
+acl_path() {
+  python3 -c "
+import re
+path = None
+in_policy = False
+with open('/etc/headscale/config.yaml') as f:
+    for line in f:
+        if re.match(r'^policy:\s*\$', line):
+            in_policy = True
+            continue
+        if in_policy:
+            if re.match(r'^\S', line):
+                break
+            m = re.match(r'\s*path:\s*\"?([^\"\s]+)\"?', line)
+            if m:
+                path = m.group(1)
+print(path or '/etc/headscale/acl.json')
+"
+}
+
+# Only ever backs up policies that pass 'headscale policy check' — broken
+# states never enter the rollback history.
+policy_backup_if_valid() {
+  local file="$1"
+  headscale policy check -f "$file" >/dev/null 2>&1 || return 1
   mkdir -p "$ACL_BACKUP_DIR" 2>/dev/null
-  headscale policy get 2>/dev/null > "$ACL_BACKUP_DIR/policy-$(date +%Y%m%d-%H%M%S).json"
+  cp "$file" "$ACL_BACKUP_DIR/policy-$(date +%Y%m%d-%H%M%S).json"
 }
 
 fmt_backup_ts() {
@@ -756,29 +780,36 @@ policy_rollback() {
   dialog --title "$TITLE — Preview: $(basename "$sel")" --scrolltext --textbox "$tmp" $H $W
   rm -f "$tmp"
 
+  local path; path=$(acl_path)
+  local check_out; check_out=$(headscale policy check -f "$sel" 2>&1)
+  if [[ $? -ne 0 ]]; then
+    dialog --title "$TITLE" --msgbox "\nThis backup no longer validates, aborting:\n\n$check_out" 10 $W
+    return
+  fi
+
   dialog --title "$TITLE" --yesno "\nRestore this version as current ACL policy?\n(current policy will be backed up first)" 9 $W || return
-  policy_backup_current
-  local out; out=$(headscale policy set -f "$sel" </dev/null 2>&1)
-  dialog --title "$TITLE" --msgbox "\n$out" 9 $W
+  policy_backup_if_valid "$path"
+  cp "$sel" "$path"
+  dialog --title "$TITLE" --msgbox "\nPolicy restored.\nheadscale watches $path and reloads it automatically." 8 $W
 }
 
 policy_view() {
-  local out; out=$(headscale policy get 2>&1)
+  local path; path=$(acl_path)
   local tmp; tmp=$(mktemp)
-  printf "%s" "$out" > "$tmp"
-  dialog --title "$TITLE — ACL Policy (read-only)" --scrolltext --textbox "$tmp" $H $W
+  cat "$path" > "$tmp" 2>/dev/null
+  dialog --title "$TITLE — ACL Policy (read-only, $path)" --scrolltext --textbox "$tmp" $H $W
   rm -f "$tmp"
 }
 
 policy_edit() {
-  local current; current=$(headscale policy get 2>&1)
-  if [[ "$current" == *"error"* ]] || [[ "$current" == *"Error"* ]]; then
-    dialog --title "$TITLE" --msgbox "\nFailed to load policy:\n\n$current" 12 $W
+  local path; path=$(acl_path)
+  if [[ ! -f "$path" ]]; then
+    dialog --title "$TITLE" --msgbox "\nACL file not found:\n  $path" 8 $W
     return
   fi
 
   local edit_tmp; edit_tmp=$(mktemp --suffix=.json)
-  printf "%s" "$current" > "$edit_tmp"
+  cp "$path" "$edit_tmp"
 
   local jump_line=""
   while true; do
@@ -786,22 +817,23 @@ policy_edit() {
     "${EDITOR:-nano}" ${jump_line:++$jump_line} "$edit_tmp" </dev/tty >/dev/tty
     clear
 
-    dialog --title "$TITLE" --yesno "\nSave and apply ACL policy?" 7 $W || { rm -f "$edit_tmp"; return; }
+    dialog --title "$TITLE" --yesno "\nValidate and apply ACL policy?" 7 $W || { rm -f "$edit_tmp"; return; }
 
-    policy_backup_current
-    local out; out=$(headscale policy set -f "$edit_tmp" </dev/null 2>&1)
+    local check_out; check_out=$(headscale policy check -f "$edit_tmp" 2>&1)
     if [[ $? -eq 0 ]]; then
+      policy_backup_if_valid "$path"
+      cp "$edit_tmp" "$path"
       rm -f "$edit_tmp"
-      dialog --title "$TITLE" --msgbox "\nPolicy applied successfully." 7 $W
+      dialog --title "$TITLE" --msgbox "\nPolicy applied.\nheadscale watches $path and reloads it automatically." 8 $W
       return
     fi
 
-    jump_line=$(printf '%s' "$out" | grep -oE 'line [0-9]+' | head -1 | grep -oE '[0-9]+')
+    jump_line=$(printf '%s' "$check_out" | grep -oE 'line [0-9]+' | head -1 | grep -oE '[0-9]+')
     local hint=""
     [[ -n "$jump_line" ]] && hint="\n\nEditor will jump to line $jump_line."
     dialog --title "$TITLE — ACL Error" \
       --extra-button --extra-label "Fix" \
-      --yesno "\nError applying policy:\n\n$out$hint\n\nFix the error?" $(( H - 2 )) $W
+      --yesno "\nPolicy is invalid, nothing was written:\n\n$check_out$hint\n\nFix the error?" $(( H - 2 )) $W
     local rc=$?
     [[ $rc -eq 0 || $rc -eq 3 ]] || { rm -f "$edit_tmp"; return; }
   done
