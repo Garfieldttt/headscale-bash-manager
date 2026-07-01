@@ -393,15 +393,17 @@ nodes_register() {
 \nRun on the client:\n\
   tailscale login --login-server ${server_url:-<server_url>}\n\
 \n\
-A URL will open in the browser. Copy the part\n\
-  nodekey:...\n\
-from the URL and paste it in the next dialog." 13 $W || return
-  dialog --title "$TITLE" --inputbox "\nPaste node key (Ctrl+Shift+V), format: nodekey:...:" 9 $W "" 2>"$TMPFILE" || return
-  local nodekey; nodekey=$(cat "$TMPFILE")
-  [[ -z "$nodekey" ]] && return
+A URL will open in the browser, e.g.\n\
+  .../register/AUTH_ID\n\
+Copy the full URL or just the AUTH_ID and paste it\n\
+in the next dialog." 13 $W || return
+  dialog --title "$TITLE" --inputbox "\nPaste the register URL or auth-id (Ctrl+Shift+V):" 9 $W "" 2>"$TMPFILE" || return
+  local input; input=$(cat "$TMPFILE")
+  [[ -z "$input" ]] && return
+  local authid="${input%/}"; authid="${authid##*/}"
   select_user_name "Select user for new node:" || return
   local username; username=$(cat "$TMPFILE")
-  local out; out=$(headscale nodes register -u "$username" -k "$nodekey" </dev/null 2>&1)
+  local out; out=$(headscale auth register --auth-id "$authid" -u "$username" </dev/null 2>&1)
   dialog --title "$TITLE" --msgbox "\n$out" 10 $W
 }
 
