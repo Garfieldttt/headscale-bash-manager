@@ -5,6 +5,10 @@ TITLE="Headscale Manager"
 TMPFILE=$(mktemp)
 trap 'rm -f "$TMPFILE"' EXIT
 
+CONFIG_FILE="/etc/headscale-manager.conf"
+ACL_BACKUP_DIR="/etc/headscale/acl-backups"
+[[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
+
 LOG=/tmp/hm.log
 : > "$LOG"
 log() { printf '[%s] %s\n' "$(date +%T)" "$*" >> "$LOG" 2>/dev/null; }
@@ -708,6 +712,56 @@ menu_apikeys() {
 
 # ─── Policy ──────────────────────────────────────────────────────────────────
 
+policy_backup_current() {
+  mkdir -p "$ACL_BACKUP_DIR" 2>/dev/null
+  headscale policy get 2>/dev/null > "$ACL_BACKUP_DIR/policy-$(date +%Y%m%d-%H%M%S).json"
+}
+
+fmt_backup_ts() {
+  local d="${1%-*}" t="${1#*-}"
+  printf '%s-%s-%s %s:%s:%s' "${d:0:4}" "${d:4:2}" "${d:6:2}" "${t:0:2}" "${t:2:2}" "${t:4:2}"
+}
+
+policy_set_backup_path() {
+  dialog --title "$TITLE" --inputbox "\nPath for ACL policy backups:" 9 $W "$ACL_BACKUP_DIR" 2>"$TMPFILE" || return
+  local newpath; newpath=$(cat "$TMPFILE")
+  [[ -z "$newpath" ]] && return
+  mkdir -p "$newpath" 2>/dev/null || { dialog --title "$TITLE" --msgbox "\nCannot create/access: $newpath" 7 $W; return; }
+  ACL_BACKUP_DIR="$newpath"
+  grep -v '^ACL_BACKUP_DIR=' "$CONFIG_FILE" 2>/dev/null > "$CONFIG_FILE.tmp"
+  printf 'ACL_BACKUP_DIR=%q\n' "$ACL_BACKUP_DIR" >> "$CONFIG_FILE.tmp"
+  mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+  dialog --title "$TITLE" --msgbox "\nBackup path set to:\n  $ACL_BACKUP_DIR" 8 $W
+}
+
+policy_rollback() {
+  mkdir -p "$ACL_BACKUP_DIR" 2>/dev/null
+  local -a files
+  readarray -t files < <(ls -1t "$ACL_BACKUP_DIR"/policy-*.json 2>/dev/null)
+  [[ ${#files[@]} -eq 0 ]] && { dialog --title "$TITLE" --msgbox "\nNo backups found in:\n  $ACL_BACKUP_DIR" 8 $W; return; }
+
+  local -a items=()
+  local f base
+  for f in "${files[@]}"; do
+    base=$(basename "$f" .json)
+    items+=("$f" "$(fmt_backup_ts "${base#policy-}")")
+  done
+  : > "$TMPFILE"
+  dialog --title "$TITLE — ACL Backups" --menu "\nSelect a version to preview:" $H $W 14 "${items[@]}" 2>"$TMPFILE" || return
+  local sel; sel=$(cat "$TMPFILE")
+  [[ -z "$sel" || ! -f "$sel" ]] && return
+
+  local tmp; tmp=$(mktemp)
+  cat "$sel" > "$tmp"
+  dialog --title "$TITLE — Preview: $(basename "$sel")" --scrolltext --textbox "$tmp" $H $W
+  rm -f "$tmp"
+
+  dialog --title "$TITLE" --yesno "\nRestore this version as current ACL policy?\n(current policy will be backed up first)" 9 $W || return
+  policy_backup_current
+  local out; out=$(headscale policy set -f "$sel" </dev/null 2>&1)
+  dialog --title "$TITLE" --msgbox "\n$out" 9 $W
+}
+
 policy_view() {
   local out; out=$(headscale policy get 2>&1)
   local tmp; tmp=$(mktemp)
@@ -734,6 +788,7 @@ policy_edit() {
 
     dialog --title "$TITLE" --yesno "\nSave and apply ACL policy?" 7 $W || { rm -f "$edit_tmp"; return; }
 
+    policy_backup_current
     local out; out=$(headscale policy set -f "$edit_tmp" </dev/null 2>&1)
     if [[ $? -eq 0 ]]; then
       rm -f "$edit_tmp"
@@ -754,14 +809,18 @@ policy_edit() {
 
 menu_policy() {
   while true; do
-    dialog --title "$TITLE — ACL Policy" --menu "\nWhat would you like to do?" 12 $W 3 \
+    dialog --title "$TITLE — ACL Policy" --menu "\nWhat would you like to do?" 14 $W 5 \
       "1" "View policy" \
       "2" "Edit policy" \
+      "3" "Rollback to previous version" \
+      "4" "Set backup path (current: $ACL_BACKUP_DIR)" \
       "0" "Back" \
       2>"$TMPFILE" || return
     case $(cat "$TMPFILE") in
       1) policy_view ;;
       2) policy_edit ;;
+      3) policy_rollback ;;
+      4) policy_set_backup_path ;;
       0) return ;;
     esac
   done
