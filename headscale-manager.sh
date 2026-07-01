@@ -817,6 +817,11 @@ policy_edit() {
     "${EDITOR:-nano}" ${jump_line:++$jump_line} "$edit_tmp" </dev/tty >/dev/tty
     clear
 
+    if cmp -s "$path" "$edit_tmp"; then
+      rm -f "$edit_tmp"
+      return
+    fi
+
     dialog --title "$TITLE" --yesno "\nValidate and apply ACL policy?" 7 $W || { rm -f "$edit_tmp"; return; }
 
     local check_out; check_out=$(headscale policy check -f "$edit_tmp" 2>&1)
