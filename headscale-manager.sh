@@ -726,11 +726,11 @@ policy_edit() {
   local edit_tmp; edit_tmp=$(mktemp --suffix=.json)
   printf "%s" "$current" > "$edit_tmp"
 
-  dialog --title "$TITLE — Edit ACL Policy" --msgbox "\nCopy/paste in editor:\n  Paste: Ctrl+Shift+V\n  Copy:  Shift+double-click, then Ctrl+Shift+C\n\nPress Enter to open editor." 11 $W
-
+  local jump_line=""
   while true; do
-    dialog --title "$TITLE — Edit ACL Policy (HuJSON)" --editbox "$edit_tmp" $H $W 2>"$TMPFILE" || { rm -f "$edit_tmp"; return; }
-    cat "$TMPFILE" > "$edit_tmp"
+    clear
+    "${EDITOR:-nano}" ${jump_line:++$jump_line} "$edit_tmp" </dev/tty >/dev/tty
+    clear
 
     dialog --title "$TITLE" --yesno "\nSave and apply ACL policy?" 7 $W || { rm -f "$edit_tmp"; return; }
 
@@ -741,10 +741,9 @@ policy_edit() {
       return
     fi
 
-    local err_line
-    err_line=$(printf '%s' "$out" | grep -oE 'line [0-9]+' | head -1)
+    jump_line=$(printf '%s' "$out" | grep -oE 'line [0-9]+' | head -1 | grep -oE '[0-9]+')
     local hint=""
-    [[ -n "$err_line" ]] && hint="\n\nError at $err_line — editor will jump to it."
+    [[ -n "$jump_line" ]] && hint="\n\nEditor will jump to line $jump_line."
     dialog --title "$TITLE — ACL Error" \
       --extra-button --extra-label "Fix" \
       --yesno "\nError applying policy:\n\n$out$hint\n\nFix the error?" $(( H - 2 )) $W
