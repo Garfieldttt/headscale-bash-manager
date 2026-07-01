@@ -732,7 +732,7 @@ print(path or '/etc/headscale/acl.json')
 "
 }
 
-# Only ever backs up policies that pass 'headscale policy check' — broken
+# Only backs up policies that pass 'headscale policy check', so broken
 # states never enter the rollback history.
 policy_backup_if_valid() {
   local file="$1"
