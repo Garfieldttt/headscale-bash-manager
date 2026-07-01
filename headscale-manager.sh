@@ -363,15 +363,6 @@ for n in json.load(sys.stdin):
   dialog --title "$TITLE — Node Details" --msgbox "\n$out" 17 $W
 }
 
-nodes_move() {
-  select_node "Select node to move:" || return
-  local node_id; node_id=$(cat "$TMPFILE")
-  select_user_name "Select new user for node #$node_id:" || return
-  local username; username=$(cat "$TMPFILE")
-  local out; out=$(headscale nodes move -i "$node_id" -u "$username" --force </dev/null 2>&1)
-  dialog --title "$TITLE" --msgbox "\n$out" 9 $W
-}
-
 nodes_list_online() {
   local out
   out=$(nodes_json | python3 -c "
@@ -444,13 +435,12 @@ menu_nodes() {
       "3" "Node details" \
       "4" "Routes overview" \
       "5" "Rename node" \
-      "6" "Move node to other user" \
-      "7" "Expire node" \
-      "8" "Delete node" \
-      "9" "Manage routes" \
-      "a" "Set tags" \
-      "b" "Register node" \
-      "c" "Copy node IP" \
+      "6" "Expire node" \
+      "7" "Delete node" \
+      "8" "Manage routes" \
+      "9" "Set tags" \
+      "a" "Register node" \
+      "b" "Copy node IP" \
       "0" "Back" \
       2>"$TMPFILE" || return
     case $(cat "$TMPFILE") in
@@ -459,13 +449,12 @@ menu_nodes() {
       3) nodes_details ;;
       4) nodes_routes_overview ;;
       5) nodes_rename ;;
-      6) nodes_move ;;
-      7) nodes_expire ;;
-      8) nodes_delete ;;
-      9) nodes_routes ;;
-      a) nodes_tags ;;
-      b) nodes_register ;;
-      c) nodes_copy_ip ;;
+      6) nodes_expire ;;
+      7) nodes_delete ;;
+      8) nodes_routes ;;
+      9) nodes_tags ;;
+      a) nodes_register ;;
+      b) nodes_copy_ip ;;
       0) return ;;
     esac
   done
