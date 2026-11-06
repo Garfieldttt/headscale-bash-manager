@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# headscale-manager — Headscale TUI (runs directly on the server)
+# headscale-manager: Headscale TUI (runs directly on the server)
 
 TITLE="Headscale Manager"
 TMPFILE=$(mktemp)
@@ -12,7 +12,8 @@ ACL_BACKUP_DIR="/etc/headscale/acl-backups"
 LOG=/tmp/hm.log
 : > "$LOG"
 log() { printf '[%s] %s\n' "$(date +%T)" "$*" >> "$LOG" 2>/dev/null; }
-export -f log LOG
+export LOG
+export -f log
 
 log "headscale-manager: start PID=$$"
 
@@ -21,7 +22,7 @@ offer_copy() {
   [[ -z "$value" ]] && return
   local kw=$(( ${#value} + 8 ))
   [[ $kw -gt $W ]] && kw=$W
-  dialog --title "$TITLE — $label" \
+  dialog --title "$TITLE: $label" \
     --inputbox "\nShift+double-click to select all, then Ctrl+Shift+C to copy:" 9 $kw "$value" 2>/dev/null
 }
 
@@ -39,10 +40,18 @@ trap 'resize_dims' SIGWINCH
 
 # ─── JSON helpers ────────────────────────────────────────────────────────────
 
-nodes_json()   { headscale nodes list      -o json </dev/null 2>&1; }
-users_json()   { headscale users list      -o json </dev/null 2>&1; }
-keys_json()    { headscale preauthkeys list -o json </dev/null 2>&1; }
-apikeys_json() { headscale apikeys list    -o json </dev/null 2>&1; }
+# headscale prints "null" instead of "[]" for an empty list
+hs_json() {
+  local out rc
+  out=$(headscale "$@" -o json </dev/null 2>&1); rc=$?
+  [[ "$out" == "null" ]] && out="[]"
+  printf '%s\n' "$out"
+  return $rc
+}
+nodes_json()   { hs_json nodes list; }
+users_json()   { hs_json users list; }
+keys_json()    { hs_json preauthkeys list; }
+apikeys_json() { hs_json apikeys list; }
 
 parse_nodes_menu() {
   log "parse_nodes_menu: start filter=${1:-all}"
@@ -62,7 +71,7 @@ for n in data:
         continue
     online = '●' if n.get('online') else '○'
     ip = n['ip_addresses'][0] if n.get('ip_addresses') else '-'
-    label = f\"{online} {n['given_name']:<20} {n['user']['name']:<28} {ip}\"
+    label = f\"{online} {n['given_name']:<26} {n['user']['name']:<28} {ip}\"
     print(n['id'])
     print(label)
 " 2>/dev/null
@@ -91,6 +100,7 @@ parse_keys_menu() {
   keys_json | python3 -c "
 import json, sys, datetime
 def fmt(ts):
+    if not ts: return '-'
     try: return datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M')
     except: return '-'
 for k in json.load(sys.stdin):
@@ -107,6 +117,7 @@ parse_apikeys_menu() {
   apikeys_json | python3 -c "
 import json, sys, datetime
 def fmt(ts):
+    if not ts: return '-'
     try: return datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M')
     except: return '-'
 for k in json.load(sys.stdin):
@@ -118,7 +129,7 @@ for k in json.load(sys.stdin):
 
 # ─── Selectors ───────────────────────────────────────────────────────────────
 # All selectors write the result into $TMPFILE and return 0/1.
-# Never call with $(...) — dialog needs a free stderr/tty for rendering.
+# Never call with $(...): dialog needs a free stderr/tty for rendering.
 # Caller pattern: select_xxx "..." || return; local id; id=$(cat "$TMPFILE")
 
 select_node() {
@@ -187,11 +198,12 @@ nodes_list() {
   out=$(nodes_json | python3 -c "
 import json, sys, datetime
 def fmt(ts):
+    if not ts: return '-'
     try: return datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M')
     except: return '-'
 nodes = json.load(sys.stdin)
-print(f\"{'ID':<4} {'St'} {'Name':<22} {'User':<28} {'IP':<16} {'Last seen'}\")
-print('-' * 88)
+print(f\"{'ID':<4} {'St'} {'Name':<26} {'User':<28} {'IP':<16} {'Last seen'}\")
+print('-' * 92)
 for n in nodes:
     online = '●' if n.get('online') else '○'
     ip = n['ip_addresses'][0] if n.get('ip_addresses') else '-'
@@ -199,11 +211,11 @@ for n in nodes:
     ra = len(n.get('available_routes') or [])
     rk = len(n.get('approved_routes') or [])
     rinfo = f' [{rk}/{ra}r]' if ra else ''
-    print(f\"{n['id']:<4} {online}  {n['given_name']:<22} {n['user']['name']:<28} {ip:<16} {last}{rinfo}\")
+    print(f\"{n['id']:<4} {online}  {n['given_name']:<26} {n['user']['name']:<28} {ip:<16} {last}{rinfo}\")
 ") || { dialog --title "$TITLE" --msgbox "\nError fetching nodes." 7 $W; return; }
   local tmp; tmp=$(mktemp)
   printf "%s" "$out" > "$tmp"
-  dialog --title "$TITLE — Nodes" --scrolltext --textbox "$tmp" $H $W
+  dialog --title "$TITLE: Nodes" --scrolltext --textbox "$tmp" $H $W
   rm -f "$tmp"
 }
 
@@ -258,7 +270,6 @@ nodes_routes() {
   dialog --title "$TITLE" --menu "\n$prompt" $H $W 14 "${items[@]}" 2>"$TMPFILE" || return
   [[ -z "$(cat "$TMPFILE")" ]] && return
   local node_id; node_id=$(cat "$TMPFILE")
-  local node_id; node_id=$(cat "$TMPFILE")
 
   local route_data
   route_data=$(nodes_json | python3 -c "
@@ -300,10 +311,7 @@ nodes_tags() {
 import json,sys
 for n in json.load(sys.stdin):
     if str(n['id']) == '${node_id}':
-        tags = []
-        for key in ('valid_tags','forced_tags','invalid_tags'):
-            tags += [t.replace('tag:','') for t in (n.get(key) or [])]
-        print(','.join(dict.fromkeys(tags)))
+        print(','.join(t.replace('tag:','') for t in (n.get('tags') or [])))
         break
 ")
   dialog --title "$TITLE" --inputbox "\nTags for node #$node_id (comma-separated, without 'tag:'):\nCurrent: ${current:--}" 10 $W "$current" 2>"$TMPFILE" || return
@@ -343,13 +351,14 @@ nodes_details() {
   out=$(nodes_json | python3 -c "
 import json, sys, datetime
 def fmt(ts):
+    if not ts: return '-'
     try: return datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M')
     except: return '-'
 for n in json.load(sys.stdin):
     if str(n['id']) == '${node_id}':
         online = 'online' if n.get('online') else 'offline'
         ips    = ', '.join(n.get('ip_addresses') or ['-'])
-        tags   = ', '.join((n.get('valid_tags') or []) + (n.get('forced_tags') or [])) or '-'
+        tags   = ', '.join(n.get('tags') or []) or '-'
         avail  = ', '.join(n.get('available_routes') or ['-'])
         appr   = ', '.join(n.get('approved_routes')  or ['-'])
         print(f'Name:       {n[\"given_name\"]}')
@@ -357,14 +366,14 @@ for n in json.load(sys.stdin):
         print(f'Status:     {online}')
         print(f'User:       {n[\"user\"][\"name\"]}')
         print(f'IPs:        {ips}')
-        print(f'Last seen:  {fmt(n.get(\"last_seen\", {}).get(\"seconds\", 0))}')
-        print(f'Expiry:     {fmt(n.get(\"expiry\", {}).get(\"seconds\", 0))}')
+        print(f'Last seen:  {fmt((n.get(\"last_seen\") or {}).get(\"seconds\", 0))}')
+        print(f'Expiry:     {fmt((n.get(\"expiry\") or {}).get(\"seconds\", 0))}')
         print(f'Tags:       {tags}')
         print(f'Routes avail: {avail}')
         print(f'Routes appr:  {appr}')
         break
 " 2>/dev/null)
-  dialog --title "$TITLE — Node Details" --msgbox "\n$out" 17 $W
+  dialog --title "$TITLE: Node Details" --msgbox "\n$out" 17 $W
 }
 
 nodes_list_online() {
@@ -372,28 +381,29 @@ nodes_list_online() {
   out=$(nodes_json | python3 -c "
 import json, sys, datetime
 def fmt(ts):
+    if not ts: return '-'
     try: return datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M')
     except: return '-'
 nodes = [n for n in json.load(sys.stdin) if n.get('online')]
 if not nodes:
     print('No nodes currently online.')
 else:
-    print(f\"{'ID':<4} {'Name':<22} {'User':<28} {'IP'}\")
-    print('-' * 78)
+    print(f\"{'ID':<4} {'St'} {'Name':<26} {'User':<28} {'IP'}\")
+    print('-' * 80)
     for n in nodes:
         ip = n['ip_addresses'][0] if n.get('ip_addresses') else '-'
-        print(f\"{n['id']:<4} {'●'} {n['given_name']:<20} {n['user']['name']:<28} {ip}\")
+        print(f\"{n['id']:<4} ●  {n['given_name']:<26} {n['user']['name']:<28} {ip}\")
 ") || { dialog --title "$TITLE" --msgbox "\nError fetching nodes." 7 $W; return; }
   local tmp; tmp=$(mktemp)
   printf "%s" "$out" > "$tmp"
-  dialog --title "$TITLE — Online Nodes" --scrolltext --textbox "$tmp" $H $W
+  dialog --title "$TITLE: Online Nodes" --scrolltext --textbox "$tmp" $H $W
   rm -f "$tmp"
 }
 
 nodes_register() {
   local server_url
   server_url=$(grep -E '^server_url:' /etc/headscale/config.yaml 2>/dev/null | awk '{print $2}')
-  dialog --title "$TITLE — Register Node" --msgbox "\
+  dialog --title "$TITLE: Register Node" --msgbox "\
 \nRun on the client:\n\
   tailscale login --login-server ${server_url:-<server_url>}\n\
 \n\
@@ -416,26 +426,26 @@ nodes_routes_overview() {
   out=$(nodes_json | python3 -c "
 import json,sys
 nodes = json.load(sys.stdin)
-has_routes = [n for n in nodes if n.get('available_routes')]
+has_routes = [n for n in nodes if n.get('available_routes') or n.get('approved_routes')]
 if not has_routes:
     print('No nodes with routes.')
 else:
-    print(f\"{'ID':<4} {'Name':<22} {'Available':<38} {'Approved'}\")
-    print('-' * 90)
+    print(f\"{'ID':<4} {'Name':<26} {'Available':<38} {'Approved'}\")
+    print('-' * 94)
     for n in has_routes:
-        avail    = ', '.join(n.get('available_routes') or [])
+        avail    = ', '.join(n.get('available_routes') or ['-'])
         approved = ', '.join(n.get('approved_routes') or ['-'])
-        print(f\"{n['id']:<4} {n['given_name']:<22} {avail:<38} {approved}\")
+        print(f\"{n['id']:<4} {n['given_name']:<26} {avail:<38} {approved}\")
 ")
   local tmp; tmp=$(mktemp)
   printf "%s" "$out" > "$tmp"
-  dialog --title "$TITLE — Routes Overview" --scrolltext --textbox "$tmp" $H $W
+  dialog --title "$TITLE: Routes Overview" --scrolltext --textbox "$tmp" $H $W
   rm -f "$tmp"
 }
 
 menu_nodes() {
   while true; do
-    dialog --title "$TITLE — Nodes" --menu "\nWhat would you like to do?" 24 $W 13 \
+    dialog --title "$TITLE: Nodes" --menu "\nWhat would you like to do?" 24 $W 13 \
       "1" "List nodes" \
       "2" "Online nodes only" \
       "3" "Node details" \
@@ -476,6 +486,7 @@ users_list() {
 import json, sys, datetime
 from collections import Counter
 def fmt(ts):
+    if not ts: return '-'
     try: return datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d')
     except: return '-'
 nodes = json.load(open('$tmp_nodes'))
@@ -489,7 +500,7 @@ for u in users:
   rm -f "$tmp_nodes" "$tmp_users"
   local tmp; tmp=$(mktemp)
   printf "%s" "$out" > "$tmp"
-  dialog --title "$TITLE — Users" --scrolltext --textbox "$tmp" $H $W
+  dialog --title "$TITLE: Users" --scrolltext --textbox "$tmp" $H $W
   rm -f "$tmp"
 }
 
@@ -521,7 +532,7 @@ users_delete() {
 
 menu_users() {
   while true; do
-    dialog --title "$TITLE — Users" --menu "\nWhat would you like to do?" 14 $W 5 \
+    dialog --title "$TITLE: Users" --menu "\nWhat would you like to do?" 14 $W 5 \
       "1" "List users" \
       "2" "Create user" \
       "3" "Rename user" \
@@ -545,6 +556,7 @@ preauthkeys_list() {
   out=$(keys_json | python3 -c "
 import json, sys, datetime, time
 def fmt(ts):
+    if not ts: return '-'
     try: return datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M')
     except: return '-'
 now = time.time()
@@ -566,7 +578,7 @@ for k in keys:
 ") || { dialog --title "$TITLE" --msgbox "\nError fetching keys." 7 $W; return; }
   local tmp; tmp=$(mktemp)
   printf "%s" "$out" > "$tmp"
-  dialog --title "$TITLE — Pre-Auth Keys" --scrolltext --textbox "$tmp" $H $W
+  dialog --title "$TITLE: Pre-Auth Keys" --scrolltext --textbox "$tmp" $H $W
   rm -f "$tmp"
 }
 
@@ -626,7 +638,7 @@ for k in json.load(sys.stdin):
 
 menu_preauthkeys() {
   while true; do
-    dialog --title "$TITLE — Pre-Auth Keys" --menu "\nWhat would you like to do?" 16 $W 6 \
+    dialog --title "$TITLE: Pre-Auth Keys" --menu "\nWhat would you like to do?" 16 $W 6 \
       "1" "List keys" \
       "2" "Create key" \
       "3" "Expire key" \
@@ -652,6 +664,7 @@ apikeys_list() {
   out=$(apikeys_json | python3 -c "
 import json, sys, datetime
 def fmt(ts):
+    if not ts: return '-'
     try: return datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M')
     except: return '-'
 keys = json.load(sys.stdin)
@@ -663,7 +676,7 @@ for k in keys:
 ") || { dialog --title "$TITLE" --msgbox "\nError fetching API keys." 7 $W; return; }
   local tmp; tmp=$(mktemp)
   printf "%s" "$out" > "$tmp"
-  dialog --title "$TITLE — API Keys" --scrolltext --textbox "$tmp" 14 $W
+  dialog --title "$TITLE: API Keys" --scrolltext --textbox "$tmp" 14 $W
   rm -f "$tmp"
 }
 
@@ -672,7 +685,7 @@ apikeys_create() {
   local expiry; expiry=$(cat "$TMPFILE")
   [[ -z "$expiry" ]] && expiry="90d"
   local out; out=$(headscale apikeys create -e "$expiry" </dev/null 2>&1)
-  dialog --title "$TITLE" --msgbox "\nNew API key:\n\n$out\n\nSave it now — it will not be shown again!" 13 $W
+  dialog --title "$TITLE" --msgbox "\nNew API key:\n\n$out\n\nSave it now: it will not be shown again!" 13 $W
   offer_copy "API key" "$(extract_key "$out")"
 }
 
@@ -693,7 +706,7 @@ apikeys_delete() {
 
 menu_apikeys() {
   while true; do
-    dialog --title "$TITLE — API Keys" --menu "\nWhat would you like to do?" 14 $W 5 \
+    dialog --title "$TITLE: API Keys" --menu "\nWhat would you like to do?" 14 $W 5 \
       "1" "List API keys" \
       "2" "Create API key" \
       "3" "Expire API key" \
@@ -771,13 +784,13 @@ policy_rollback() {
     items+=("$f" "$(fmt_backup_ts "${base#policy-}")")
   done
   : > "$TMPFILE"
-  dialog --title "$TITLE — ACL Backups" --menu "\nSelect a version to preview:" $H $W 14 "${items[@]}" 2>"$TMPFILE" || return
+  dialog --title "$TITLE: ACL Backups" --menu "\nSelect a version to preview:" $H $W 14 "${items[@]}" 2>"$TMPFILE" || return
   local sel; sel=$(cat "$TMPFILE")
   [[ -z "$sel" || ! -f "$sel" ]] && return
 
   local tmp; tmp=$(mktemp)
   cat "$sel" > "$tmp"
-  dialog --title "$TITLE — Preview: $(basename "$sel")" --scrolltext --textbox "$tmp" $H $W
+  dialog --title "$TITLE: Preview: $(basename "$sel")" --scrolltext --textbox "$tmp" $H $W
   rm -f "$tmp"
 
   local path; path=$(acl_path)
@@ -797,7 +810,7 @@ policy_view() {
   local path; path=$(acl_path)
   local tmp; tmp=$(mktemp)
   cat "$path" > "$tmp" 2>/dev/null
-  dialog --title "$TITLE — ACL Policy (read-only, $path)" --scrolltext --textbox "$tmp" $H $W
+  dialog --title "$TITLE: ACL Policy (read-only, $path)" --scrolltext --textbox "$tmp" $H $W
   rm -f "$tmp"
 }
 
@@ -836,7 +849,7 @@ policy_edit() {
     jump_line=$(printf '%s' "$check_out" | grep -oE 'line [0-9]+' | head -1 | grep -oE '[0-9]+')
     local hint=""
     [[ -n "$jump_line" ]] && hint="\n\nEditor will jump to line $jump_line."
-    dialog --title "$TITLE — ACL Error" \
+    dialog --title "$TITLE: ACL Error" \
       --extra-button --extra-label "Fix" \
       --yesno "\nPolicy is invalid, nothing was written:\n\n$check_out$hint\n\nFix the error?" $(( H - 2 )) $W
     local rc=$?
@@ -846,7 +859,7 @@ policy_edit() {
 
 menu_policy() {
   while true; do
-    dialog --title "$TITLE — ACL Policy" --menu "\nWhat would you like to do?" 14 $W 5 \
+    dialog --title "$TITLE: ACL Policy" --menu "\nWhat would you like to do?" 14 $W 5 \
       "1" "View policy" \
       "2" "Edit policy" \
       "3" "Rollback to previous version" \
@@ -877,7 +890,7 @@ try:
 except Exception:
     print('No response from server')
 ")
-  dialog --title "$TITLE — Health" --msgbox "\n$out" 10 $W
+  dialog --title "$TITLE: Health" --msgbox "\n$out" 10 $W
 }
 
 # ─── Warnings ────────────────────────────────────────────────────────────────
@@ -910,7 +923,7 @@ for line in issues:
 " 2>/dev/null)
   rm -f "$tmp_nodes" "$tmp_keys"
   [[ -z "$msg" ]] && return
-  dialog --title "$TITLE — Warnings" --msgbox "\n⚠  Attention:\n\n$msg" 11 $W
+  dialog --title "$TITLE: Warnings" --msgbox "\n Attention:\n\n$msg" 11 $W
 }
 
 # ─── Setup ───────────────────────────────────────────────────────────────────
@@ -934,7 +947,7 @@ main() {
   check_warnings
   while true; do
     dialog --title "$TITLE" \
-      --menu "\nHeadscale $(headscale version 2>/dev/null | head -1)" 17 $W 7 \
+      --menu "\nHeadscale $(headscale version 2>/dev/null | head -1 | awk '{print $NF}')" 17 $W 7 \
       "1" "Manage nodes" \
       "2" "Manage users" \
       "3" "Manage pre-auth keys" \
