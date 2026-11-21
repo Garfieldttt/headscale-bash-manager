@@ -2,6 +2,11 @@
 # headscale-manager: Headscale TUI (runs directly on the server)
 
 TITLE="Headscale Manager"
+
+# English UI regardless of the server locale (dialog buttons, tool messages)
+export LC_ALL=C.UTF-8
+export LANGUAGE=
+
 TMPFILE=$(mktemp)
 trap 'rm -f "$TMPFILE"' EXIT
 
